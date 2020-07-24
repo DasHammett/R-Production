@@ -4,6 +4,7 @@ library(RcppRoll)
 library(lubridate)
 library(scales)
 library(jsonlite)
+library(ggrepel)
 
 raw <- read.csv("https://analisi.transparenciacatalunya.cat/api/views/jj6z-iyrp/rows.csv?accessType=DOWNLOAD&sorting=true", header = TRUE, sep=",")
 raw$TipusCasData <- dmy(raw$TipusCasData)
@@ -46,7 +47,7 @@ etiquetes <- function(x) {
       tolabel <- data.frame(MunicipiDescripcio = y) %>%
                  left_join(resum_ciutat)
       paste(unique(tolabel$MunicipiDescripcio),
-	    "\nCasos totals:", max(tolabel$CumSum), 
+	    "\nCasos totals:", format(max(tolabel$CumSum), big.mark = "."),
 	    "\nMitjana 14d: ", round(tail(tolabel$RollingMean14,1),0), 
 	    sep = " ")
       }
@@ -61,14 +62,14 @@ ggplot(resum_ciutat, aes(TipusCasData, NumCasos)) +
    geom_text(data = . %>% do(.[round(seq(1,nrow(.),length.out = 10)),]), aes(label=NumCasos),size=3,color = "grey50",vjust=-1) + 
    #stat_smooth(geom = "line", alpha = 0.5, size = 0.2, aes(color = "color.smooth")) +
    labs(title=paste("Top municipis afectats per COVID-19 a Catalunya",
-		    "\nNúm. Casos confirmats:", sum(resum_ciutat$NumCasos),
+		    "\nNúm. Casos confirmats:", format(sum(resum_ciutat$NumCasos),big.mark = "."),
 		    "\nMitjana últims 14 dies:", round(tail(rolling14_all$Rolling,1),0), "casos diaris",
 		    sep=" "),
 	caption = paste0("Última actualització de ",max(resum_ciutat$TipusCasData)),
 	x = element_blank(),
 	y = element_blank()
 	) + 
-   facet_wrap(~MunicipiDescripcio,ncol = 3, scales = "free_y", labeller = labeller(MunicipiDescripcio = etiquetes)) +
+   facet_wrap(~MunicipiDescripcio, scales = "free_y", labeller = labeller(MunicipiDescripcio = etiquetes)) +
    theme_bw() +
    theme(legend.margin=margin(b = -0.6, t = -0.5, unit = "cm"),
          legend.position = "top",
@@ -114,7 +115,7 @@ top9_world <- world %>%
    arrange(desc(N)) %>%
    top_n(9) %>%
    pull(Country)
-top9_world <-  factor(top9_world, level = top9_world)
+#top9_world <-  factor(top9_world, level = top9_world)
 
 etiquetes <- function(x) {
    lapply(x, function(y) {
@@ -128,34 +129,39 @@ etiquetes <- function(x) {
    )
 }
 
+#top9_world <- c("Spain","Italy","France","United Kingdom","Turkey","Germany", "Portugal","Austria", "Belgium","Netherlands")
+
 world %>%
    filter(Country %in% top9_world) %>%
    mutate(Country = factor(Country, level = top9_world)) %>% {
    ggplot(.,aes(row_num,confirmed)) +
    geom_line(stat = "smooth",
-	     method = "nls",
-	     formula = y ~ p1 * exp(-p2*exp(-p3*x)),
-	     method.args = list(nls.control(maxiter = 1000,
-					    minFactor = 1e-10),
-				start=c(p1=max(.$confirmed), p2=18, p3 = 0.02)
-				),
-	     se = FALSE,
-	     color = "grey20",
-	     alpha = 0.5,
-	     linetype = "dashed",
-	     fullrange = TRUE
+             method = "nls",
+             formula = y ~ p1 * exp(-p2*exp(-p3*x)),
+             method.args = list(nls.control(maxiter = 500),
+        				    #minFactor = 1e-10),
+        			start=c(p1=max(.$confirmed), 
+               				p2= log(max(.$confirmed)), 
+        				p3 = 0.02)
+				#start = data.frame(p1 = c(1,1e8), p2 = c(1, 100), p3 = c(0.01, 1))
+        			),
+             se = FALSE,
+             color = "grey20",
+             alpha = 0.5,
+             linetype = "dashed",
+             fullrange = TRUE
             ) +
 #   geom_line(stat = "smooth",
 #	     method = "nls",
-#	     formula = pmax(y,0.0001) ~ SSgompertz(x, p1, p2, p3),
+#	     formula = pmax(y,0.01) ~ SSgompertz(x, p1, p2, p3),
 #	     se = FALSE,
-#	     color = "grey80",
+#	     color = "grey40",
 #	     fullrange = TRUE,
 #	     linetype = "dashed") +
    geom_line(color = "#1279A1", size = 0.6) +
    facet_wrap(~Country, scale = "free_y", labeller = labeller(Country = etiquetes)) +
    labs(title =  "Top countries for COVID-19 confirmed cases and projection",
-        subtitle = expression(fitted~from~a~Gompertz~"function:"~N~"*"~italic(e)^{-b~"*"~italic(e)^{-k~"*"~t}}),
+        subtitle = expression(Forecast~fitted~from~a~Gompertz~"function:"~N~"*"~italic(e)^{-b~"*"~italic(e)^{-k~"*"~t}}),
         x = element_blank(),
         y = element_blank(),
         caption = paste("last available data from:",max(.$date),sep=" ")) +
@@ -175,5 +181,57 @@ world %>%
          panel.grid.minor = element_blank(),
          strip.background = element_blank(),
          strip.text = element_text(size=11,hjust = 0),
-	 plot.subtitle = element_text(size = 12,vjust = 4)
-   )}
+	 plot.subtitle = element_text(size = 12,vjust = 4),
+	 plot.margin=unit(c(0.1,0.5,0.1,0.1),"cm")
+   )
+   }
+
+
+resum_world <- world %>% 
+   filter(Country %in% top9_world) %>%
+   arrange(date) %>% 
+   group_by(Country, date) %>%
+   summarise(confirmed = sum(confirmed)) %>%
+   mutate(CumSum = confirmed - lag(confirmed),
+          RollingMean14 = roll_mean(confirmed, 14, align = "right", fill = NA),
+          Country = factor(Country, levels = top9_world))
+
+ggplot(resum_world, aes(date, CumSum)) +
+   geom_point(data = . %>% do(.[round(seq(1,nrow(.),length.out = 10)),]),
+	      fill="grey80", 
+	      shape = 21, 
+	      size = 1.1, 
+	      color = "grey80") +
+   geom_line(aes(color = "color.diari"), 
+	     alpha = 0.5, 
+	     size = 0.3) +
+   geom_line(aes(y=roll_mean(CumSum, n = 14, align = "right", fill=NA), 
+		 color = "color.mitjana")) +
+   geom_text_repel(data = . %>% do(.[round(seq(1,nrow(.),length.out = 10)),]),
+                   aes(label=format(CumSum,big.mark = ".")),
+                   size=3,
+                   color = "grey50") +
+   labs(title=paste("Top countries for COVID-19 confirmed cases",
+		    "\nOverall Confirmed cases:", format(sum(resum_world$CumSum,na.rm = TRUE),big.mark = "."),
+		    sep=" "),
+	caption = paste0("Last update from: ",max(resum_world$date)),
+	x = element_blank(),
+	y = element_blank()
+	) + 
+   facet_wrap(~Country, scales = "free_y", labeller = labeller(Country = etiquetes)) +
+   theme_bw() +
+   theme(legend.margin=margin(b = -0.6, t = -0.5, unit = "cm"),
+         legend.position = "top",
+         legend.justification = "right",
+         panel.grid.major = element_blank(), 
+         panel.grid.minor = element_blank(),
+         strip.background = element_blank(),
+         strip.text = element_text(size=11,hjust = 0),
+	 plot.margin=unit(c(0.1,0.5,0.1,0.1),"cm")) +
+   scale_color_manual(values = c("color.diari" = "grey80",
+                                 "color.mitjana" = "#1279A1",
+				 "color.smooth" = "red"),
+                      labels = c("Daily confirmed", "Rolling 14d daily confirmed"),
+                      name = "") +
+  scale_y_continuous(expand=c(0.2,0.4)) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b")
