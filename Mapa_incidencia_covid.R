@@ -44,11 +44,11 @@ evolucio <- resum %>%
    summarise(NumCasos = sum(NumCasos,na.rm = TRUE),NAcumulats = sum(NAcumulats, na.rm = TRUE)) %>% 
    mutate(Incidencia = NAcumulats/pob_total * 1e5) %>% 
    ggplot(.,aes(TipusCasData,Incidencia)) + 
-      geom_line() +
+      geom_line(color="#3374B0") +
       theme(panel.grid.major = element_blank(), 
             panel.grid.minor = element_blank(),
             plot.title = element_text(size = 9, hjust = 1,face = "italic")) +
-   labs(title = "Evolució incidencia a Catalunya") +
+   labs(title = "Evolució incidència a Catalunya") +
    scale_x_date(date_breaks = "1 month", labels = label_date_short())
 
 mapa_N <- left_join(mapa, filter(resum, TipusCasData == max_data), by = c("CODIINE" = "MunicipiCodi"))
@@ -65,9 +65,10 @@ mapa_N <- mapa_N %>%
 	  )
 
 Incidencia <- round(sum(mapa_N$NAcumulats, na.rm = T)/pob_total*1e5,0)
+Incidencia_dia_anterior = resum %>% ungroup() %>% filter(TipusCasData == max_data-1) %>% summarise(N = round(sum(NAcumulats, na.rm = TRUE)/pob_total*1e5,0)) %>% pull()
 
 ggplot(mapa_N) +
-   geom_sf(aes(fill = Incidencia),color="grey50") +
+   geom_sf(aes(fill = Incidencia),color="grey50",size=0.3) +
    scale_fill_gradientn(trans = "log10",
          		        na.value = muted("green"),
                         colours = c(muted("darkgreen"),"green","yellow","red","#40004D"),
@@ -75,10 +76,10 @@ ggplot(mapa_N) +
 			          ) +
    theme_void() +
    labs(fill = "Incidencia",
-        title = "Incidencia COVID-19 últims 14 dies per cada 100.000 habitants",
-        subtitle = paste("Incidència a Catalunya:",Incidencia, sep = " ")) +
-   theme(plot.title = element_text(family="Droid Sans", size = 16),
-         plot.subtitle = element_text(family="Droid Sans", size = 12,face = "italic")) +
+        title = "Incidència COVID-19 últims 14 dies per cada 100.000 habitants",
+        subtitle = paste0("Incidència a Catalunya: ",Incidencia, " (" ,sprintf("%+d",Incidencia-Incidencia_dia_anterior)," vs dia anterior",")")) +
+   theme(plot.title = element_text(family="Helvetica Neue LT Std", size = 14),
+         plot.subtitle = element_text(family="Helvetica Neue LT Std", size = 12,face = "italic")) +
    annotation_custom(
 	tableGrob(
          mapa_N %>% 
@@ -87,7 +88,7 @@ ggplot(mapa_N) +
 	     slice(1:7) %>% 
 	     select(NOM_MUNI,NAcumulats,Cens,Incidencia,Nivell) %>%
 	     mutate(Incidencia = round(Incidencia)) %>%
-	     rename(Municipi=NOM_MUNI,Confirmats=NAcumulats),
+	     rename(Municipi=NOM_MUNI,Confirmats=NAcumulats,Incidència = Incidencia),
 	  rows = NULL,
 	  theme = ttheme_minimal(core=list(bg_params=list(fill=c("#E9E9E9","white")),fg_params=list(cex = 0.8)))
 	  ),
