@@ -65,7 +65,7 @@ mapa_N <- mapa_N %>%
 	  )
 
 Incidencia <- round(sum(mapa_N$NAcumulats, na.rm = T)/pob_total*1e5,0)
-Incidencia_dia_anterior = resum %>% ungroup() %>% filter(TipusCasData == max_data-1) %>% summarise(N = round(sum(NAcumulats, na.rm = TRUE)/pob_total*1e5,0)) %>% pull()
+Incidencia_dia_anterior <- resum %>% ungroup() %>% filter(TipusCasData == max_data-1) %>% summarise(N = round(sum(NAcumulats, na.rm = TRUE)/pob_total*1e5,0)) %>% pull()
 
 ggplot(mapa_N) +
    geom_sf(aes(fill = Incidencia),color="grey50",size=0.3) +
