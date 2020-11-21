@@ -26,9 +26,9 @@ pob$CodiINE <- gsub(".{1}$", "", pob$Codi)
 pob$CodiINE <- stringr::str_pad(pob$CodiINE, 5, side = "left", pad = 0)
 pob_total <- pob %>% filter(Literal == "Catalunya") %>% select(Cens) %>% pull()
 
-max_data <- ymd(max(raw$TipusCasData))
+max_data <- ymd(max(raw$TipusCasData) - 1)
 resum <- raw %>%
-   filter(TipusCasDescripcio != "Sospitós") %>%
+   filter(TipusCasDescripcio != "Sospitós", TipusCasData <= max_data) %>%
    group_by(TipusCasData, MunicipiDescripcio, MunicipiCodi) %>%
    summarise(NumCasos = sum(NumCasos, na.rm = TRUE)) %>%
    filter(MunicipiCodi != "<NA>") %>%
@@ -36,7 +36,11 @@ resum <- raw %>%
    group_by(MunicipiDescripcio) %>% 
    arrange(MunicipiDescripcio) %>% 
    complete(TipusCasData = full_seq(c(min(TipusCasData),max_data), period = 1), fill = list(NumCasos = 0)) %>%
-   mutate(NAcumulats = roll_sum(NumCasos,n = 14, align = "right", fill = NA)) %>%
+   mutate(NAcumulats = roll_sum(NumCasos,n = 14, align = "right", fill = NA),
+          Direccio = case_when(NAcumulats -lag(NAcumulats) > 0 ~ "↑" , 
+                               NAcumulats - lag(NAcumulats) < 0 ~ "↓", 
+                               NAcumulats - lag(NAcumulats) == 0 ~ "→", 
+                               TRUE ~ "→")) %>%
    fill(MunicipiCodi) 
 
 evolucio <- resum %>% 
@@ -48,8 +52,8 @@ evolucio <- resum %>%
       theme(panel.grid.major = element_blank(), 
             panel.grid.minor = element_blank(),
             plot.title = element_text(size = 9, hjust = 1,face = "italic")) +
-   labs(title = "Evolució incidència a Catalunya") +
-   scale_x_date(date_breaks = "1 month", labels = label_date_short())
+      labs(title = "Evolució incidència a Catalunya") +
+      scale_x_date(date_breaks = "1 month", labels = label_date_short())
 
 mapa_N <- left_join(mapa, filter(resum, TipusCasData == max_data), by = c("CODIINE" = "MunicipiCodi"))
 mapa_N <- left_join(mapa_N, pob[,c("CodiINE","Cens")], by = c("CODIINE" = "CodiINE"))
@@ -83,12 +87,13 @@ ggplot(mapa_N) +
    annotation_custom(
 	tableGrob(
          mapa_N %>% 
-	     as.data.frame() %>% 
-	     arrange(desc(Cens)) %>% 
-	     slice(1:7) %>% 
-	     select(NOM_MUNI,NAcumulats,Cens,Incidencia,Nivell) %>%
-	     mutate(Incidencia = round(Incidencia)) %>%
-	     rename(Municipi=NOM_MUNI,Confirmats=NAcumulats,Incidència = Incidencia),
+            as.data.frame() %>% 
+            arrange(desc(Cens)) %>% 
+            slice(1:7) %>% 
+            select(NOM_MUNI,NAcumulats,Cens,Incidencia,Nivell,Direccio) %>%
+            mutate(Incidencia = paste(round(Incidencia),Direccio,sep = " ")) %>%
+            select(-Direccio) %>%
+            rename(Municipi=NOM_MUNI,Confirmats=NAcumulats,Incidència = Incidencia),
 	  rows = NULL,
 	  theme = ttheme_minimal(core=list(bg_params=list(fill=c("#E9E9E9","white")),fg_params=list(cex = 0.8)))
 	  ),
