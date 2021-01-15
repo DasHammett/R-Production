@@ -6,6 +6,7 @@ library(scales)
 library(gridExtra)
 library(RcppRoll)
 library(tidyr)
+library(stringr)
 
 mapa <- st_read("Catalunya GEO/LIMADM_MUNICIPI.shp", options = "ENCODING=ISO-8859-15")
 raw <- read.csv("https://analisi.transparenciacatalunya.cat/api/views/jj6z-iyrp/rows.csv?accessType=DOWNLOAD&sorting=true",
@@ -15,6 +16,7 @@ raw <- read.csv("https://analisi.transparenciacatalunya.cat/api/views/jj6z-iyrp/
 raw$TipusCasData <- dmy(raw$TipusCasData)
 raw$ComarcaDescripcio <- trimws(raw$ComarcaDescripcio,whitespace=" ")
 raw$MunicipiCodi <- stringr::str_pad(raw$MunicipiCodi, 5, side = "left", pad = 0)
+raw$MunicipiDescripcio <- str_to_title(raw$MunicipiDescripcio)
 
 pob <- read.csv("https://analisi.transparenciacatalunya.cat/api/views/b4rr-d25b/rows.csv?accessType=DOWNLOAD&sorting=true",
                 header = TRUE,
@@ -37,9 +39,9 @@ resum <- raw %>%
    arrange(MunicipiDescripcio) %>% 
    complete(TipusCasData = full_seq(c(min(TipusCasData),max_data), period = 1), fill = list(NumCasos = 0)) %>%
    mutate(NAcumulats = roll_sum(NumCasos,n = 14, align = "right", fill = NA),
-          Direccio = case_when(NAcumulats -lag(NAcumulats) > 0 ~ "↑" , 
-                               NAcumulats - lag(NAcumulats) < 0 ~ "↓", 
-                               NAcumulats - lag(NAcumulats) == 0 ~ "→", 
+          Direccio = case_when(NAcumulats -lag(NAcumulats) > 0 ~ "▲" , 
+                               NAcumulats - lag(NAcumulats) < 0 ~ "▼", 
+                               NAcumulats - lag(NAcumulats) == 0 ~ "▷", 
                                TRUE ~ "→")) %>%
    fill(MunicipiCodi) 
 
@@ -62,21 +64,27 @@ mapa_N <- mapa_N %>%
    mutate(PROVINCIA1 = strtrim(CODIINE,2),
           Incidencia = NAcumulats/Cens*1e5,
           Nivell = case_when(Incidencia <= 25 ~ "Molt baix",
-	                     between(Incidencia, 26,50) ~ "Baix",
-	                     between(Incidencia,51,150) ~ "Moderat",
-	                     between(Incidencia,151,250) ~ "Alt",
-	                     TRUE ~ "Extrem")
+                            between(Incidencia, 26,50) ~ "Baix",
+                            between(Incidencia,51,150) ~ "Moderat",
+                            between(Incidencia,151,250) ~ "Alt",
+                            TRUE ~ "Extrem")
 	  )
 
 Incidencia <- round(sum(mapa_N$NAcumulats, na.rm = T)/pob_total*1e5,0)
 Incidencia_dia_anterior <- resum %>% ungroup() %>% filter(TipusCasData == max_data-1) %>% summarise(N = round(sum(NAcumulats, na.rm = TRUE)/pob_total*1e5,0)) %>% pull()
+#min_green <- rescale(100,from=range(mapa_N$Incidencia, na.rm = TRUE))
+#min_yellow <- rescale(300,from=range(mapa_N$Incidencia, na.rm = TRUE))
+#min_red <- rescale(1000,from=range(mapa_N$Incidencia, na.rm = TRUE))
 
 ggplot(mapa_N) +
-   geom_sf(aes(fill = Incidencia),color="grey50",size=0.3) +
+   geom_sf(aes(fill = Incidencia),color="grey40",size=0.3) +
    scale_fill_gradientn(trans = "log10",
-         		        na.value = muted("green"),
-                        colours = c(muted("darkgreen"),"green","yellow","red","#40004D"),
-		            	values = c(0,0.1,0.154192,0.7,1)
+         		        na.value = "#1CA108",
+                        colours = c("#1CA108","green","yellow","red","#40004D"),
+#		            	values = c(35,100,300,1000,Inf),
+		            	#values = color_values,
+                        breaks = c(35,100,300,1000,3000),
+                        limits = c(35,3000)
 			          ) +
    theme_void() +
    labs(fill = "Incidencia",
