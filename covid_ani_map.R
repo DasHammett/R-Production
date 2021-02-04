@@ -2,8 +2,6 @@ library(ggplot2)
 library(dplyr)
 library(sf)
 library(lubridate)
-library(scales)
-library(gridExtra)
 library(RcppRoll)
 library(tidyr)
 library(stringr)
@@ -40,30 +38,23 @@ resum <- raw %>%
    group_by(MunicipiDescripcio) %>% 
    arrange(MunicipiDescripcio) %>% 
    complete(TipusCasData = full_seq(c(min(TipusCasData),max_data), period = 1), fill = list(NumCasos = 0)) %>%
-   mutate(NAcumulats = roll_sum(NumCasos,n = 14, align = "right", fill = NA),
-          Direccio = case_when(NAcumulats -lag(NAcumulats) > 0 ~ "▲" , 
-                               NAcumulats - lag(NAcumulats) < 0 ~ "▼", 
-                               NAcumulats - lag(NAcumulats) == 0 ~ "▷", 
-                               TRUE ~ "→")) %>%
+   mutate(NAcumulats = roll_sum(NumCasos,n = 14, align = "right", fill = NA)) %>%
    fill(MunicipiCodi) %>%
    ungroup()
 
 mapa <- as.data.frame(mapa)
 evolucio_mapa <- map_df(
-    full_seq(c(as.Date("2020-03-01"), as.Date("2021-01-28")),period = 1),
+    full_seq(range(resum$TipusCasData),period = 1),
     ~left_join(
-        select(mapa, CODIINE,geometry,NOM_MUNI),
+        select(mapa, CODIINE,geometry),#,NOM_MUNI),
         select(resum, TipusCasData, MunicipiCodi,NumCasos, NAcumulats) %>% filter(TipusCasData == .x),
         by = c("CODIINE" = "MunicipiCodi")
         )
-    )
-
-evolucio_mapa <- evolucio_mapa %>% 
+    ) %>% 
    fill(TipusCasData,.direction = "updown") %>%
    left_join(select(pob,CodiINE,Cens), by = c("CODIINE" = "CodiINE")) %>%
    mutate(Incidencia = NAcumulats/Cens*1e5) %>%
    arrange(TipusCasData)
-
 
 map <- ggplot(evolucio_mapa) +
    geom_sf(aes(fill = Incidencia, geometry = geometry),color="grey40",size=0.3) +
@@ -77,5 +68,7 @@ map <- ggplot(evolucio_mapa) +
    labs(title = "Incidència COVID-19 per dia:\nDia: {current_frame}") +
    transition_manual(TipusCasData)
 
-animate(map, end_pause = 3, duration = 30, nframes = 334 )
-anim_save("anim.gif")
+nframes = length(full_seq(range(resum$TipusCasData),period = 1))
+animate(map, end_pause = 3, duration = 30, nframes = nframes, renderer = av_renderer("out.mkv"))
+anim_save("anim.mkv")
+
