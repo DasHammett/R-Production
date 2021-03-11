@@ -17,11 +17,13 @@ fqs <- select(fqs,3,4) %>%
    tibble::rowid_to_column() #rowid_to_column to create index on destination
 
 # Set origin for connections
-origin <- c()
+origin <- c(2.1951747749949106,41.41819546685941)
 
 # Create df with origin lon,lat and extend it to size of venue checkins
-origen <- data.frame(venue.location.lat=origin[2], venue.location.lng = origin[1], type = "origin")
-origen <- data.frame(t(replicate(nrow(fqs), origen, simplify = TRUE))) %>% tibble::rowid_to_column() #rowid_to_column to create index on origin
+origen <- data.frame(venue.location.lat = rep(origin[2],nrow(fqs)), 
+                     venue.location.lng = rep(origin[1],nrow(fqs)), 
+                     type = rep("origin", nrow(fqs))) %>%
+          tibble::rowid_to_column()
 
 routes <- rbind(fqs,origen)
 routes <- st_as_sf(routes, coords = c("venue.location.lng","venue.location.lat"),  crs = 4326)
@@ -39,5 +41,6 @@ ggplot() +
   geom_sf(data = cities, colour = alpha("#FEF7C3",0.1)) +  
   geom_sf(data = routes_lines, colour = "#E5FF99", size = 0.15, alpha = 0.5) +
   #coord_sf(xlim = c(-10,150), ylim = c(0,80)) + 
+  coord_sf(crs = st_crs("+proj=natearth"))+
   theme_void() +
-  theme(panel.background = element_rect(fill = "#001328")) #"#261d11"))
+  theme(panel.background = element_rect(fill = "#001328"))
