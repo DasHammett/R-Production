@@ -17,7 +17,7 @@ fqs <- select(fqs,3,4) %>%
    tibble::rowid_to_column() #rowid_to_column to create index on destination
 
 # Set origin for connections
-origin <- c(2.1951747749949106,41.41819546685941)
+origin <- c()
 
 # Create df with origin lon,lat and extend it to size of venue checkins
 origen <- data.frame(venue.location.lat = rep(origin[2],nrow(fqs)), 
