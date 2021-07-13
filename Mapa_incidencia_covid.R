@@ -7,6 +7,7 @@ library(gridExtra)
 library(RcppRoll)
 library(tidyr)
 library(stringr)
+library(cowplot)
 
 mapa <- st_read("Catalunya GEO/LIMADM_MUNICIPI.shp", options = "ENCODING=ISO-8859-15")
 raw <- read.csv("https://analisi.transparenciacatalunya.cat/api/views/jj6z-iyrp/rows.csv?accessType=DOWNLOAD&sorting=true",
@@ -17,7 +18,7 @@ raw$TipusCasData <- dmy(raw$TipusCasData)
 raw$ComarcaDescripcio <- trimws(raw$ComarcaDescripcio,whitespace=" ")
 raw$MunicipiCodi <- stringr::str_pad(raw$MunicipiCodi, 5, side = "left", pad = 0)
 raw$MunicipiDescripcio <- str_to_title(raw$MunicipiDescripcio)
-max_data <- ymd(max(raw$TipusCasData) - 1)
+max_data <- ymd(max(raw$TipusCasData) - 0)
 
 pob <- read.csv("https://analisi.transparenciacatalunya.cat/api/views/b4rr-d25b/rows.csv?accessType=DOWNLOAD&sorting=true",
                 header = TRUE,
@@ -61,9 +62,9 @@ mapa_N <- mapa_N %>%
    mutate(PROVINCIA1 = strtrim(CODIINE,2),
           Incidencia = NAcumulats/Cens*1e5,
           Nivell = case_when(Incidencia <= 25 ~ "Molt baix",
-                            between(Incidencia, 26,50) ~ "Baix",
-                            between(Incidencia,51,150) ~ "Moderat",
-                            between(Incidencia,151,250) ~ "Alt",
+                            between(round(Incidencia,0),26,50) ~ "Baix",
+                            between(round(Incidencia,0),51,150) ~ "Moderat",
+                            between(round(Incidencia,0),151,250) ~ "Alt",
                             TRUE ~ "Extrem")
 	  )
 
@@ -98,7 +99,7 @@ ggplot(mapa_N) +
             select(NOM_MUNI,NAcumulats,Cens,Incidencia,Nivell,diff) %>%
             mutate(NAcumulats = paste(NAcumulats,diff,sep = " "), Incidencia = round(Incidencia)) %>%
             select(-diff) %>%
-            rename(Municipi=NOM_MUNI,Confirmats=NAcumulats,Incidència = Incidencia),
+            rename(Municipi=NOM_MUNI,"Confirmats\n(diferencia 7d)"=NAcumulats,Incidència = Incidencia),
 	  rows = NULL,
 	  theme = ttheme_minimal(core=list(bg_params=list(fill=c("#E9E9E9","white")),fg_params=list(cex = 0.8)))
 	  ),
@@ -112,4 +113,32 @@ ggplot(mapa_N) +
     ymin = 4778000,
     ymax = 4705000
     )
+
+df <- filter(raw, MunicipiDescripcio == "Barcelona", TipusCasData >= max_data -28) %>% 
+   group_by(TipusCasData, DistricteDescripcio) %>% 
+   summarise(N = sum(NumCasos)) %>% 
+   mutate(PC = N/sum(N))
+
+p1 <- df %>%
+   ggplot(.,aes(TipusCasData,PC)) + 
+       geom_area(aes(color = reorder(DistricteDescripcio,PC), fill = reorder(DistricteDescripcio, PC)), alpha = 0.5) + 
+       #geom_col(aes(y =  N), alpha = 0.2) +
+       scale_fill_brewer(palette="Paired", name = "Districte") +
+       scale_color_brewer(palette = "Paired", name = "Districte") +
+       #scale_x_date(date_breaks = "2 days",date_labels = "%d/%m") +
+       scale_x_date(date_breaks = "2 day",date_labels = "%d/%m", expand = c(0.01,0)) +
+       scale_y_continuous(label = percent) + 
+       labs(title = "% confirmats i núm. casos COVID-19 per districte de Barcelona. Últims 28 dies")
+
+p2 <- df  %>% 
+   ggplot(.,aes(TipusCasData,N)) + 
+       geom_col(aes(y =  N), alpha = 0.2) +
+       geom_text(data = . %>% group_by(TipusCasData) %>% summarise(N = sum(N)), aes( label = N, vjust = 1.5),colour = "grey20") + 
+       scale_fill_brewer(palette="Paired") +
+       scale_color_brewer(palette = "Paired") +
+       scale_x_date(date_breaks = "2 day",date_labels = "%d/%m", expand = c(0.01,0)) +
+       theme_void()
+
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tb")
+ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
 
