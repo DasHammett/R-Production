@@ -7,10 +7,11 @@ library(cowplot)
 library(ggmap)
 
 df <- read.csv("dades.csv", sep = ";", header = TRUE)
+colnames(df) <- gsub("\\.","-", colnames(df))
 mapdf <- st_read("GEO/0301040100_SecCens_UNITATS_ADM.shp")
 mapa <- select(mapdf, DISTRICTE, BARRI, AEB, SEC_CENS, geometry) %>% mutate(across(!geometry, as.numeric))
 
-mapa <- left_join(mapa,  select(df,  c("Dte", "Barri", "AEB", "SC", "VOX", "TriasxBCN", "PSC.CP", "BCOMU.C", "Partitmésvotat")),  by = c("DISTRICTE" = "Dte",  "BARRI" = "Barri",  "AEB" = "AEB",  "SEC_CENS" = "SC"))
+mapa <- left_join(mapa,  select(df,  c("Dte", "Barri", "AEB", "SC", "VOX", "TriasxBCN", "PSC-CP", "BCOMU-C", "Partitmesvotat")),  by = c("DISTRICTE" = "Dte",  "BARRI" = "Barri",  "AEB" = "AEB",  "SEC_CENS" = "SC"))
 
 
 ggplot() +
@@ -22,8 +23,8 @@ ggplot() +
 
 
 mapa_long <- df %>%
-    select(Dte, Barri, AEB, SC, TriasxBCN, PSC.CP, BCOMU.C, ERC.AM, PP, VOX, CUP.AMUNT) %>%
-    melt(id.vars = c("Dte", "Barri", "AEB", "SC")) %>%
+    select(Dte, Barri, AEB, SC, Partitmesvotat, TriasxBCN, "PSC-CP", "BCOMU-C", "ERC-AM", PP, VOX) %>%
+    melt(id.vars = c("Dte", "Barri", "AEB", "SC", "Partitmesvotat")) %>%
     left_join(select(mapa, c(DISTRICTE, BARRI, AEB, SEC_CENS, geometry)), by = c("Dte" = "DISTRICTE", "Barri" = "BARRI", "AEB" = "AEB", "SC" = "SEC_CENS")) %>%
     st_as_sf()
 
@@ -32,9 +33,8 @@ ggplot() +
     facet_wrap(~variable, ncol = 4, shrink = FALSE) +
     theme_void()
 
-partits <- c("TriasxBCN", "PSC.CP", "BCOMU.C", "VOX", "ERC.AM", "PP")
+partits <- c("TriasxBCN", "PSC-CP", "BCOMU-C", "VOX", "ERC-AM", "PP")
 colors <- c("#00C5B3", "#E10B17", "#9a2eb1", "#58c036", "#fcc34f", "#0357a0")
-
 maps <- map2(.x = partits,
              .y = colors,
              .f = function(x, y) {
@@ -56,7 +56,7 @@ plot_grid(plotlist = maps)
 # Big map
 
 st_transform(st_as_sfc(st_bbox(mapdf)), crs = 4326)
-topo <- get_stamenmap(bbox = c(left = 2.051707, bottom = 41.31612, right = 2.229129, top = 41.4686), zoom = 14)
+topo <- get_stamenmap(bbox = c(left = 2.051707, bottom = 41.31612, right = 2.229129, top = 41.4686), zoom = 15)
 
 ggmap_bbox <- function(map) {
   if (!inherits(map, "ggmap")) stop("map must be a ggmap object")
@@ -79,8 +79,17 @@ ggmap_bbox <- function(map) {
 
 topo <- ggmap_bbox(topo)
 
+mapa <- st_transform(mapa, crs = 3857)
+
 ggmap(topo) +
-    geom_sf(data = mapa_long,
-            fill = "grey",
-            inherit.aes = FALSE
-            )
+    geom_sf(data = mapa,
+            aes(fill = Partitmesvotat),
+            inherit.aes = FALSE,
+            alpha = 0.5,
+            lwd = 0.2
+            ) +
+  scale_fill_manual(values = colors, breaks = partits) +
+  labs(title = "Partit més votat a Barcelona per Secció Censal") +
+  theme_void() +
+  theme(legend.position = "none")
+
