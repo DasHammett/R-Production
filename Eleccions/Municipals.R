@@ -7,9 +7,20 @@ library(cowplot)
 library(ggmap)
 
 df <- read.csv("dades.csv", sep = ";", header = TRUE)
+districtes <- read.csv("districtes_i_barris.csv", sep = ",", header = TRUE, fileEncoding = "UTF-8")
 colnames(df) <- gsub("\\.","-", colnames(df))
 mapdf <- st_read("GEO/0301040100_SecCens_UNITATS_ADM.shp")
 mapa <- select(mapdf, DISTRICTE, BARRI, AEB, SEC_CENS, geometry) %>% mutate(across(!geometry, as.numeric))
+
+top_barri <- df %>%
+  select(Dte, Barri, AEB, SC, Partitmesvotat, TriasxBCN, "PSC-CP", "BCOMU-C", "ERC-AM", PP, VOX) %>%
+  melt(id.vars = c("Dte", "Barri", "AEB", "SC", "Partitmesvotat")) %>%
+  group_by(variable) %>%
+  arrange(-value, .by_group = TRUE) %>%
+  slice(1) %>%
+  left_join(select(mapa, c("SEC_CENS","geometry", "BARRI", "DISTRICTE", "AEB")), by = c("SC" = "SEC_CENS", "Dte" = "DISTRICTE", "Barri" = "BARRI", "AEB" = "AEB")) %>%
+  left_join(select(districtes, c("CODI_BARRI","NOM_BARRI")),by = c("Barri" = "CODI_BARRI")) %>%
+  st_as_sf()
 
 mapa <- left_join(mapa,  select(df,  c("Dte", "Barri", "AEB", "SC", "VOX", "TriasxBCN", "PSC-CP", "BCOMU-C", "Partitmesvotat")),  by = c("DISTRICTE" = "Dte",  "BARRI" = "Barri",  "AEB" = "AEB",  "SEC_CENS" = "SC"))
 
@@ -80,6 +91,7 @@ ggmap_bbox <- function(map) {
 topo <- ggmap_bbox(topo)
 
 mapa <- st_transform(mapa, crs = 3857)
+top_barri <- st_transform(top_barri, crs = 3857)
 
 ggmap(topo) +
     geom_sf(data = mapa,
@@ -88,8 +100,20 @@ ggmap(topo) +
             alpha = 0.5,
             lwd = 0.2
             ) +
-  scale_fill_manual(values = colors, breaks = partits) +
-  labs(title = "Partit més votat a Barcelona per Secció Censal") +
-  theme_void() +
-  theme(legend.position = "none")
+  #  geom_sf_label(data = top_barri, aes(label = NOM_BARRI), inherit.aes = FALSE) +
+    geom_label_repel(
+      data = top_barri,
+      aes(label = paste0(variable,"\n",
+                        "Barri amb més vots: ", NOM_BARRI, "\n",
+                        "Num. vots: ",value),
+          geometry = geometry),
+      stat = "sf_coordinates",
+      size = 2,
+      fill = alpha(c("white"), 0.5),
+      inherit.aes = FALSE,
+      min.segment.length = 0.01) +
+    scale_fill_manual(values = colors, breaks = partits) +
+    labs(title = "Partit més votat a Barcelona per Secció Censal") +
+    theme_void() +
+    theme(legend.position = "none")
 
