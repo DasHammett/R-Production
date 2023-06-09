@@ -29,10 +29,10 @@ mapa <- left_join(mapa,  select(df,  c("Dte", "Barri", "AEB", "SC", "Electors", 
 
 
 ggplot() +
-    geom_sf(data = mapa, aes(fill = PSC.CP)) +
+    geom_sf(data = mapa, aes(fill = PP)) +
 #    geom_sf_label(data = top_n(df$VOX, 3), aes(label = BARRI)) +
     coord_sf(crs = st_crs("+proj=natearth")) +
-    scale_fill_gradient(low = "white", high = "green") +
+    scale_fill_gradient(low = "white", high = "darkblue") +
     theme_void()
 
 
@@ -68,33 +68,9 @@ plot_grid(plotlist = maps)
 
 
 # Big map
+bbox <- as.data.frame(t(as.matrix(st_bbox(st_transform(mapdf, crs = 4326)))))
+topo <- get_stamenmap(bbox = c(left = bbox$xmin, bottom = bbox$ymin, right = bbox$xmax, top = bbox$ymax), zoom = 15)
 
-st_transform(st_as_sfc(st_bbox(mapdf)), crs = 4326)
-topo <- get_stamenmap(bbox = c(left = 2.051707, bottom = 41.31612, right = 2.229129, top = 41.4686), zoom = 15)
-
-ggmap_bbox <- function(map) {
-  if (!inherits(map, "ggmap")) stop("map must be a ggmap object")
-  # Extract the bounding box (in lat/lon) from the ggmap to a numeric vector,
-  # and set the names to what sf::st_bbox expects:
-  map_bbox <- setNames(unlist(attr(map, "bb")),
-                       c("ymin", "xmin", "ymax", "xmax"))
-
-  # Coonvert the bbox to an sf polygon, transform it to 3857,
-  # and convert back to a bbox (convoluted, but it works)
-  bbox_3857 <- st_bbox(st_transform(st_as_sfc(st_bbox(map_bbox, crs = 4326)), 3857))
-
-  # Overwrite the bbox of the ggmap object with the transformed coordinates
-  attr(map, "bb")$ll.lat <- bbox_3857["ymin"]
-  attr(map, "bb")$ll.lon <- bbox_3857["xmin"]
-  attr(map, "bb")$ur.lat <- bbox_3857["ymax"]
-  attr(map, "bb")$ur.lon <- bbox_3857["xmax"]
-  map
-}
-
-topo <- ggmap_bbox(topo)
-
-mapa <- st_transform(mapa, crs = 3857)
-top_barri <- st_transform(top_barri, crs = 3857)
 
 final_topo <- ggmap(topo) +
     geom_sf(data = mapa,
@@ -102,6 +78,7 @@ final_topo <- ggmap(topo) +
             inherit.aes = FALSE,
             lwd = 0.2
             ) +
+    coord_sf(crs = 4326) +
     geom_label_repel(
       data = top_barri,
       aes(label = paste0(variable, "\n",
@@ -126,30 +103,39 @@ system2("zathura", c("/mnt/Multimedia/.cache/R/R.cache/ggplot.pdf"))
 
 library(rayshader)
 
-maps_height <- ggmap(topo, darken = c(1, "white")) +
+topo_attributes <- attributes(topo)
+topo_trans <- matrix(adjustcolor(topo, alpha.f = 0), nrow = nrow(topo))
+attributes(topo_trans) <- topo_attributes
+
+maps_height <- ggmap(topo_trans) +
     geom_sf(data = mapa,
             aes(fill = pc_vots),
             inherit.aes = FALSE,
-            lwd = 0.1
+            lwd = 0.1,
+            color = "white"
             ) +
+    coord_sf(crs = 4326) +
     labs(title = "Partit més votat a Barcelona per Secció Censal",
          subtitle = "Altura representa percentatge de participació") +
     scale_fill_viridis_c(trans = scales::trans_new("x3", function(x) x^3, function(x) x^1 / 3)) +
- #   theme_void() +
+#    theme_void() +
     theme(legend.position = "none",
           axis.text = element_blank(),
           axis.ticks = element_blank(),
           axis.title = element_blank(),
           plot.title = element_text(size = 8),
-          plot.subtitle = element_text(size = 6)
+          plot.subtitle = element_text(size = 4, face = "italic", vjust = 6),
+          panel.grid = element_blank(),
+          panel.border = element_blank()
           )
 
 final_map <- ggmap(topo) +
     geom_sf(data = mapa,
-            aes(fill = Partitmesvotat),
+            aes(fill = Partitmesvotat, alpha = 0.9),
             inherit.aes = FALSE,
             lwd = 0.1,
             ) +
+    coord_sf(crs = 4326) +
     scale_fill_manual(values = colors, breaks = partits) +
     labs(title = "Partit més votat a Barcelona per Secció Censal",
          subtitle = "Altura representa percentatge de participació") +
@@ -159,7 +145,9 @@ final_map <- ggmap(topo) +
           axis.ticks = element_blank(),
           axis.title = element_blank(),
           plot.title = element_text(size = 8),
-          plot.subtitle = element_text(size = 6)
+          panel.grid = element_blank(),
+          plot.subtitle = element_text(size = 4, face = "italic", vjust = 6),
+          panel.border = element_blank()
           )
 
 plot_gg(ggobj = final_map,
