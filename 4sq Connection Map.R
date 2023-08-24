@@ -17,30 +17,32 @@ fqs <- select(fqs,3,4) %>%
    tibble::rowid_to_column() #rowid_to_column to create index on destination
 
 # Set origin for connections
-origin <- c()
+origin <- c(41.41700471231859, 2.1936888311886014)
 
 # Create df with origin lon,lat and extend it to size of venue checkins
-origen <- data.frame(venue.location.lat = rep(origin[2],nrow(fqs)), 
-                     venue.location.lng = rep(origin[1],nrow(fqs)), 
+origen <- data.frame(venue.location.lat = rep(origin[1],nrow(fqs)),
+                     venue.location.lng = rep(origin[2],nrow(fqs)),
                      type = rep("origin", nrow(fqs))) %>%
-          tibble::rowid_to_column()
+  tibble::rowid_to_column()
 
 routes <- rbind(fqs,origen)
 routes <- st_as_sf(routes, coords = c("venue.location.lng","venue.location.lat"),  crs = 4326)
 
 # Create multipoint and linestring sf object and measure distance (st_segnement()) from origin to destination, by id
 routes_lines <- routes %>%
-  group_by(rowid) %>% 
+  group_by(rowid) %>%
   summarise(do_union = FALSE) %>%
   st_cast("LINESTRING") %>%
   st_segmentize(units::set_units(20,km))
 
 # Plot chart
+# list of available projections: https://proj.org/en/9.2/operations/projections
 ggplot() +
   geom_sf(data= world, fill = "#2a2a2a", colour = "#8E8E8E", size = 0.05) +
-  geom_sf(data = cities, colour = alpha("#FEF7C3",0.1)) +  
-  geom_sf(data = routes_lines, colour = "#E5FF99", size = 0.15, alpha = 0.5) +
-  #coord_sf(xlim = c(-10,150), ylim = c(0,80)) + 
-  coord_sf(crs = st_crs("+proj=natearth"))+
+  geom_sf(data = cities, colour = NA ) +
+  geom_sf(data = st_set_crs(st_as_sf(filter(fqs,type == "destination"), coords = c("venue.location.lng", "venue.location.lat")), 4326), colour = "red", stroke = 0, size = 0.15, shape = 1) +
+  geom_sf(data = routes_lines, colour = "#E5FF99", size = 0.15, alpha = 0.5, lineend = "round") +
+  #coord_sf(xlim = c(-10,150), ylim = c(0,80)) +
+  coord_sf(crs = st_crs("+proj=wink2")) +
   theme_void() +
   theme(panel.background = element_rect(fill = "#001328"))
